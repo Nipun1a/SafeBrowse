@@ -38,7 +38,7 @@ const Hero = () => {
             </div>
 
             <button className="mt-5 inline-flex items-center rounded-md border border-cyan-800/50 bg-[#07111d] px-4 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-500/60 hover:text-cyan-200">
-              View Previous Report
+              View Detail Report
             </button>
 
           </div>

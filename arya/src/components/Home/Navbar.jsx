@@ -13,17 +13,14 @@ const Navbar = () => {
           <ul className="flex items-center gap-7 text-sm font-medium">
             <li className="cursor-pointer transition-colors hover:text-blue-400">Home</li>
             <li className="cursor-pointer transition-colors hover:text-blue-400">Scanner</li>
-            <li className="cursor-pointer transition-colors hover:text-blue-400">History</li>
             <li className="cursor-pointer transition-colors hover:text-blue-400">About</li>
           </ul>
         </div>
         <div className="flex items-center gap-3">
           <button className="rounded-md border border-blue-500/60 px-4 py-2 text-sm font-medium text-white transition-all hover:border-blue-400 hover:text-blue-300">
-            Login
+            Download Extension
           </button>
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-blue-500">
-            Register
-          </button>
+          
         </div>
       </nav>
     </header>

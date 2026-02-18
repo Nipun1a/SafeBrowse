@@ -3,14 +3,18 @@ import Navbar from './components/Home/Navbar';
 import Hero from './components/Home/Hero';
 import Middle from './components/Home/Middle';
 import Footer from './components/Home/Footer';
+import Scan from './components/Scan_page/Scan';
+import Result from './components/Result_page/Result';
+import About from './components/About_page/About';
+
+
 
 function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <Navbar />
-      <Hero />
-      <Middle />
-      <Footer />
+      <About />
+      
+      
     </div>
   );
 }
