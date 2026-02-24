@@ -1,6 +1,6 @@
 const ScanResult = require('../Models/ScanResults');
-const googleSafeBrowsing = require('google-safebrowsing');
-const calculateScore = require('../utils/calculateScore');
+const googleSafeBrowsing = require('../Services/googleSafeBrowsing');
+const calculateScore = require('../Services/scoreService');
 
 
 const scanController = async (req, res) => {
