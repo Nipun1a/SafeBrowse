@@ -1,10 +1,23 @@
-const express = require('express');
-const router = express.Router();
+const virusTotalScan = require('../Services/virusTotal');
 
-const scanController = require('../Controllers/ScanController');
-const validateUrl = require('../Middleware/validateUrl');
 
-router.post('/scan', validateUrl, scanController);
+// Run both APIs in parallel
+const [googleResult, virusTotalResult] = await Promise.all([
+    googleSafeBrowsing(url),
+    virusTotalScan(url)
+]);
 
-module.exports = router;
+// Calculate score
+const score = calculateScore(googleResult, virusTotalResult);
 
+// Save
+const newScan = await ScanResult.create({
+    url,
+    domain,
+    score,
+    threatDetails: {
+        googleSafeBrowsing: googleResult,
+        virusTotal: virusTotalResult
+    },
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+});
