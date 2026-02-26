@@ -1,54 +1,59 @@
 const ScanResult = require('../Models/ScanResults');
 const googleSafeBrowsing = require('../Services/googleSafeBrowsing');
+const virusTotalScan = require('../Services/virusTotal');
 const calculateScore = require('../Services/scoreService');
 
-
 const scanController = async (req, res) => {
-    try{
-        const {url} = req.body;
+    try {
+        const { url } = req.body;
         const domain = req.domain;
 
-        // check if already scan and not expired 
-        const existingscan = await ScanResult.findOne({domain, expires:{$gt: new Date()}});
+        // Check if already scanned and not expired
+        const existingScan = await ScanResult.findOne({
+            domain,
+            expiresAt: { $gt: new Date() }
+        });
 
-        if(existingscan){
+        if (existingScan) {
             return res.status(200).json({
-                source: "cache",
-                data: existingscan
-            
+                source: 'cache',
+                data: existingScan
             });
+        }
 
-        } 
-        
-        // call google safe Browsing 
-        const googleResult = await googleSafeBrowsing(url);
+        // Run scanners in parallel
+        const [googleResult, virusTotalResult] = await Promise.all([
+            googleSafeBrowsing(url),
+            virusTotalScan(url)
+        ]);
 
-        // Calculate Score
-        const score = calculateScore(googleResult);
+        // Calculate score
+        const score = calculateScore(googleResult, virusTotalResult);
 
         // Save result to database
         const newScan = await ScanResult.create({
             url,
             domain,
             score,
-            threatDetails:{
-                googleSafeBrowsing: googleResult
-            
+            threatDetails: {
+                googleSafeBrowsing: googleResult,
+                virusTotal: {
+                    malicious: virusTotalResult.malicious || 0,
+                    harmless: virusTotalResult.harmless || 0
+                }
             },
-            expiresAt: new Date(Date.now() + 24*60*60*1000) // 24 hours
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
         });
 
-        // Send response 
+        // Send response
         return res.status(200).json({
-            source: "live-scan",
+            source: 'live-scan',
             data: newScan
         });
+    } catch (error) {
+        console.error('Scan Error:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
     }
-    catch(error){
-        console.error("Scan Error:", error);
-        return res.status(500).json({error: "Internal Server Error"});
-    }
-
 };
 
 module.exports = scanController;
