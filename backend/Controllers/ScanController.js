@@ -2,13 +2,25 @@ const ScanResult = require('../Models/ScanResults');
 const googleSafeBrowsing = require('../Services/googleSafeBrowsing');
 const virusTotalScan = require('../Services/virusTotal');
 const calculateScore = require('../Services/scoreService');
+const checkSSL = require('../Services/sslService');
+const checkDomainAge = require('../Services/domainAgeService');
+const redisClient = require('../config/redis');
 
 const scanController = async (req, res) => {
     try {
         const { url } = req.body;
         const domain = req.domain;
 
-        // Check if already scanned and not expired
+        // 1) Redis cache check
+        const cached = await redisClient.get(domain);
+        if (cached) {
+            return res.status(200).json({
+                source: 'redis-cache',
+                data: JSON.parse(cached)
+            });
+        }
+
+        // 2) Mongo cache check
         const existingScan = await ScanResult.findOne({
             domain,
             expiresAt: { $gt: new Date() }
@@ -21,16 +33,16 @@ const scanController = async (req, res) => {
             });
         }
 
-        // Run scanners in parallel
-        const [googleResult, virusTotalResult] = await Promise.all([
+        // 3) Run checks in parallel
+        const [googleResult, virusTotalResult, sslResult, domainAge] = await Promise.all([
             googleSafeBrowsing(url),
-            virusTotalScan(url)
+            virusTotalScan(url),
+            checkSSL(domain),
+            checkDomainAge(domain)
         ]);
 
-        // Calculate score
-        const score = calculateScore(googleResult, virusTotalResult);
+        const score = calculateScore(googleResult, virusTotalResult, sslResult, domainAge);
 
-        // Save result to database
         const newScan = await ScanResult.create({
             url,
             domain,
@@ -38,14 +50,17 @@ const scanController = async (req, res) => {
             threatDetails: {
                 googleSafeBrowsing: googleResult,
                 virusTotal: {
-                    malicious: virusTotalResult.malicious || 0,
-                    harmless: virusTotalResult.harmless || 0
-                }
+                    malicious: virusTotalResult?.malicious || 0,
+                    harmless: virusTotalResult?.harmless || 0
+                },
+                sslValid: !!sslResult?.valid
             },
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
         });
 
-        // Send response
+        // 4) Save to Redis for 24h
+        await redisClient.setEx(domain, 24 * 60 * 60, JSON.stringify(newScan));
+
         return res.status(200).json({
             source: 'live-scan',
             data: newScan
