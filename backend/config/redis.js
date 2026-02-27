@@ -1,16 +1,23 @@
-const { createClient } = require('redis');
+const { createClient } = require("redis");
+
+const rawRedisUrl = process.env.REDIS_URL || "";
+const sanitizedRedisUrl = rawRedisUrl.replace(/^redis-cli\s+--tls\s+-u\s+/, "").trim();
 
 const redisClient = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379'
+    url: sanitizedRedisUrl,
 });
 
-redisClient.on('error', (err) => {
-    console.error('Redis Error:', err);
+redisClient.on("error", (err) => {
+    console.error("Redis Error:", err);
 });
 
 (async () => {
+    if (!sanitizedRedisUrl) {
+        throw new Error("REDIS_URL is not set");
+    }
+
     await redisClient.connect();
-    console.log(" Redis Connected");
+    console.log("Redis Connected");
 })();
 
 module.exports = redisClient;
