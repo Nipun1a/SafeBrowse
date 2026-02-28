@@ -1,6 +1,30 @@
-import React from 'react'
+import React, { useState } from 'react'
 
 const Hero = () => {
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState('')
+
+  const normalizeUrl = (value) => {
+    const trimmed = value.trim()
+    if (!trimmed) return ''
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
+    return `https://${trimmed}`
+  }
+
+  const handleScan = (event) => {
+    event.preventDefault()
+
+    const formattedUrl = normalizeUrl(url)
+    if (!formattedUrl) {
+      setError('Please enter a website URL.')
+      return
+    }
+
+    setError('')
+    sessionStorage.setItem('pendingScanUrl', formattedUrl)
+    window.location.href = '/scan'
+  }
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
       <section className="relative overflow-hidden rounded-2xl border border-cyan-900/40 bg-[#03080f] p-6 shadow-[inset_0_0_0_1px_rgba(14,116,144,0.18),0_30px_80px_-45px_rgba(6,182,212,0.4)] sm:p-10">
@@ -26,20 +50,28 @@ const Hero = () => {
               platform for modern digital safety.
             </p>
 
-            <div className="mt-7 flex w-full max-w-xl flex-col rounded-xl border border-cyan-500/20 bg-[#071320]/90 p-2 shadow-[0_0_0_1px_rgba(6,182,212,0.14),0_0_35px_rgba(8,145,178,0.22)] sm:flex-row">
-              <input
-                type="text"
-                placeholder="https://example.com"
-                className="h-12 flex-1 rounded-lg bg-transparent px-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
-              />
-              <button className="mt-2 h-12 rounded-lg bg-cyan-500 px-6 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 sm:mt-0">
-                Scan Website
-              </button>
-            </div>
+            <form onSubmit={handleScan} className="mt-7 w-full max-w-xl">
+              <div className="flex flex-col rounded-xl border border-cyan-500/20 bg-[#071320]/90 p-2 shadow-[0_0_0_1px_rgba(6,182,212,0.14),0_0_35px_rgba(8,145,178,0.22)] sm:flex-row">
+                <input
+                  type="text"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  placeholder="https://example.com"
+                  className="h-12 flex-1 rounded-lg bg-transparent px-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="mt-2 h-12 rounded-lg bg-cyan-500 px-6 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-70 sm:mt-0"
+                >
+                  Scan Website
+                </button>
+              </div>
+              {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
+            </form>
 
-            <button className="mt-5 inline-flex items-center rounded-md border border-cyan-800/50 bg-[#07111d] px-4 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-500/60 hover:text-cyan-200">
+            <a href="/result" className="mt-5 inline-flex items-center rounded-md border border-cyan-800/50 bg-[#07111d] px-4 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-500/60 hover:text-cyan-200">
               View Detail Report
-            </button>
+            </a>
 
           </div>
 

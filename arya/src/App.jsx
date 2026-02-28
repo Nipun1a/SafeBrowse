@@ -7,16 +7,31 @@ import Scan from './components/Scan_page/Scan';
 import Result from './components/Result_page/Result';
 import About from './components/About_page/About';
 
-
+const Home = () => (
+  <div className="min-h-screen bg-slate-950 text-white">
+    <Navbar />
+    <Hero />
+    <Middle />
+    <Footer />
+  </div>
+);
 
 function App() {
-  return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <About />
-      
-      
-    </div>
-  );
+  const pathname = window.location.pathname.toLowerCase();
+
+  if (pathname === '/scan') {
+    return <Scan />;
+  }
+
+  if (pathname === '/result') {
+    return <Result />;
+  }
+
+  if (pathname === '/about') {
+    return <About />;
+  }
+
+  return <Home />;
 }
 
 export default App;

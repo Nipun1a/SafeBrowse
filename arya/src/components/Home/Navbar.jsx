@@ -11,9 +11,16 @@ const Navbar = () => {
         </div>
         <div className="hidden md:block">
           <ul className="flex items-center gap-7 text-sm font-medium">
-            <li className="cursor-pointer transition-colors hover:text-blue-400">Home</li>
-            <li className="cursor-pointer transition-colors hover:text-blue-400">Scanner</li>
-            <li className="cursor-pointer transition-colors hover:text-blue-400">About</li>
+            <li>
+              <a href="/" className="cursor-pointer transition-colors hover:text-blue-400">
+                Home
+              </a>
+            </li>
+            <li>
+              <a href="/about" className="cursor-pointer transition-colors hover:text-blue-400">
+                About
+              </a>
+            </li>
           </ul>
         </div>
         <div className="flex items-center gap-3">
