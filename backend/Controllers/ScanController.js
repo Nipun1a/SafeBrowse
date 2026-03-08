@@ -5,9 +5,12 @@ const calculateScore = require('../Services/scoreService');
 const checkSSL = require('../Services/sslService');
 const checkDomainAge = require('../Services/domainAgeService');
 const redisClient = require('../config/redis');
+const connectDB = require('../config/db');
 
 const scanController = async (req, res) => {
     try {
+        await connectDB();
+
         const { url } = req.body;
         const domain = req.domain;
 
