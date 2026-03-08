@@ -53,6 +53,19 @@ const resolveApiBaseUrl = () => {
   }
 }
 
+const buildScanEndpoint = (baseUrl) => {
+  const normalizedBaseUrl = (baseUrl || '').replace(/\/+$/, '')
+  if (!normalizedBaseUrl) {
+    return '/api/scan'
+  }
+
+  if (/^https?:\/\//i.test(normalizedBaseUrl)) {
+    return `${normalizedBaseUrl}/scan`
+  }
+
+  return `${normalizedBaseUrl}/scan`
+}
+
 const StepIcon = ({ type, status }) => {
   if (status === 'DONE') {
     return (
@@ -123,7 +136,7 @@ const Scan = () => {
 
       setDisplayUrl(pendingUrl)
       const API_BASE_URL = resolveApiBaseUrl()
-      const scanEndpoint = new URL('scan', `${API_BASE_URL}/`).toString()
+      const scanEndpoint = buildScanEndpoint(API_BASE_URL)
 
       progressTimer = setInterval(() => {
         setProgress((prev) => {
