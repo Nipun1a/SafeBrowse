@@ -23,6 +23,31 @@ const LOG_LINES = [
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const resolveApiBaseUrl = () => {
+  const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
+
+  if (!configuredBaseUrl) {
+    return import.meta.env.DEV ? 'http://localhost:5000/api' : '/api'
+  }
+
+  const normalizedBaseUrl = configuredBaseUrl.replace(/\/+$/, '')
+
+  if (!/^https?:\/\//i.test(normalizedBaseUrl)) {
+    return normalizedBaseUrl
+  }
+
+  try {
+    const parsed = new URL(normalizedBaseUrl)
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '')
+    if (!parsed.pathname || parsed.pathname === '/') {
+      parsed.pathname = '/api'
+    }
+    return parsed.toString().replace(/\/+$/, '')
+  } catch {
+    return normalizedBaseUrl
+  }
+}
+
 const StepIcon = ({ type, status }) => {
   if (status === 'DONE') {
     return (
@@ -92,7 +117,8 @@ const Scan = () => {
       }
 
       setDisplayUrl(pendingUrl)
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api')
+      const API_BASE_URL = resolveApiBaseUrl()
+      const scanEndpoint = new URL('scan', `${API_BASE_URL}/`).toString()
 
       progressTimer = setInterval(() => {
         setProgress((prev) => {
@@ -107,7 +133,7 @@ const Scan = () => {
 
       try {
         const [response] = await Promise.all([
-          fetch(`${API_BASE_URL}/scan`, {
+          fetch(scanEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
