@@ -13,8 +13,8 @@ app.use(cors({
   allowedHeaders: ["Content-Type","Authorization"]
 }));
 
-// Handle preflight requests
-app.options('*', cors());
+// Express 5 + path-to-regexp throws on "*" in app.options().
+// app.use(cors(...)) already handles preflight for all routes.
 
 // Middlewares
 app.use(express.json());
