@@ -6,15 +6,24 @@ const limiter = require("./Middleware/rateLimiter");
 
 const app = express();
 
+// CORS configuration
+app.use(cors({
+  origin: "*",
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"]
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
 // Middlewares
-app.use(cors());
 app.use(express.json());
 app.use(limiter);
 
 // Routes
 app.use('/api', scanRoutes);
 
-// Health check route
+// Health check
 app.get('/', (req, res) => {
   res.send('API is running...');
 });
