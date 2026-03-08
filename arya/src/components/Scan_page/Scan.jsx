@@ -24,10 +24,15 @@ const LOG_LINES = [
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const resolveApiBaseUrl = () => {
+  if (!import.meta.env.DEV) {
+    // In production, always hit same-origin /api and let Vercel rewrite proxy to backend.
+    return '/api'
+  }
+
   const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
 
   if (!configuredBaseUrl) {
-    return import.meta.env.DEV ? 'http://localhost:5000/api' : '/api'
+    return 'http://localhost:5000/api'
   }
 
   const normalizedBaseUrl = configuredBaseUrl.replace(/\/+$/, '')
