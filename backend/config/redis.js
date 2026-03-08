@@ -3,11 +3,17 @@ const { createClient } = require("redis");
 const rawRedisUrl = process.env.REDIS_URL || "";
 const sanitizedRedisUrl = rawRedisUrl.replace(/^redis-cli\s+--tls\s+-u\s+/, "").trim();
 
-const redisClient = sanitizedRedisUrl
-    ? createClient({
-        url: sanitizedRedisUrl,
-    })
-    : null;
+let redisClient = null;
+
+if (sanitizedRedisUrl) {
+    try {
+        redisClient = createClient({
+            url: sanitizedRedisUrl,
+        });
+    } catch (error) {
+        console.error("Redis client init failed:", error.message);
+    }
+}
 
 let redisConnectPromise;
 

@@ -28,7 +28,11 @@ process.on('unhandledRejection', (err) => {
     process.exit(1);
 });
 
-startServer().catch((error) => {
-    console.error('Startup Error:', error.message);
-    process.exit(1);
-});
+if (require.main === module) {
+    startServer().catch((error) => {
+        console.error('Startup Error:', error.message);
+        process.exit(1);
+    });
+}
+
+module.exports = app;
