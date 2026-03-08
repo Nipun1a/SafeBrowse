@@ -67,7 +67,7 @@ const Result = () => {
     try {
       const session = sessionStorage.getItem('latestScanResult')
       return session ? JSON.parse(session) : null
-    } catch (error) {
+    } catch {
       return null
     }
   }, [])
@@ -93,7 +93,7 @@ const Result = () => {
   const parsedUrl = useMemo(() => {
     try {
       return new URL(analyzedUrl)
-    } catch (error) {
+    } catch {
       return null
     }
   }, [analyzedUrl])

@@ -3,21 +3,87 @@ const { createClient } = require("redis");
 const rawRedisUrl = process.env.REDIS_URL || "";
 const sanitizedRedisUrl = rawRedisUrl.replace(/^redis-cli\s+--tls\s+-u\s+/, "").trim();
 
-const redisClient = createClient({
-    url: sanitizedRedisUrl,
-});
+const redisClient = sanitizedRedisUrl
+    ? createClient({
+        url: sanitizedRedisUrl,
+    })
+    : null;
 
-redisClient.on("error", (err) => {
-    console.error("Redis Error:", err);
-});
+let redisConnectPromise;
 
-(async () => {
-    if (!sanitizedRedisUrl) {
-        throw new Error("REDIS_URL is not set");
+if (redisClient) {
+    redisClient.on("error", (err) => {
+        console.error("Redis Error:", err);
+    });
+}
+
+const ensureRedisConnection = async () => {
+    if (!redisClient) {
+        return false;
     }
 
-    await redisClient.connect();
-    console.log("Redis Connected");
-})();
+    if (redisClient.isOpen) {
+        return true;
+    }
 
-module.exports = redisClient;
+    if (!redisConnectPromise) {
+        redisConnectPromise = redisClient
+            .connect()
+            .then(() => {
+                console.log("Redis Connected");
+                return true;
+            })
+            .catch((error) => {
+                console.error("Redis connection failed:", error.message);
+                return false;
+            })
+            .finally(() => {
+                redisConnectPromise = undefined;
+            });
+    }
+
+    return redisConnectPromise;
+};
+
+const get = async (key) => {
+    if (!redisClient) {
+        return null;
+    }
+
+    await ensureRedisConnection();
+    if (!redisClient.isOpen) {
+        return null;
+    }
+
+    try {
+        return await redisClient.get(key);
+    } catch (error) {
+        console.error("Redis get failed:", error.message);
+        return null;
+    }
+};
+
+const setEx = async (key, ttlSeconds, value) => {
+    if (!redisClient) {
+        return false;
+    }
+
+    await ensureRedisConnection();
+    if (!redisClient.isOpen) {
+        return false;
+    }
+
+    try {
+        await redisClient.setEx(key, ttlSeconds, value);
+        return true;
+    } catch (error) {
+        console.error("Redis setEx failed:", error.message);
+        return false;
+    }
+};
+
+module.exports = {
+    ensureRedisConnection,
+    get,
+    setEx,
+};
