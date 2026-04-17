@@ -32,3 +32,5 @@ If found → return cached result instantly ⚡
 
 Live demo: https://safe-browse-v1ng.vercel.app/
 If not → analyze URL → store result in Redis
+
+the project folder name is arya that's why this project ends 
