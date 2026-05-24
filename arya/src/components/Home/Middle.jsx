@@ -84,9 +84,9 @@ const Middle = () => {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button className="rounded-md bg-cyan-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">
+            <a href="/download-extension" className="rounded-md bg-cyan-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400">
               Download Extension
-            </button>
+            </a>
             
           </div>
         </div>

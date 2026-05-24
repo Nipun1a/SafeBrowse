@@ -24,9 +24,9 @@ const Navbar = () => {
           </ul>
         </div>
         <div className="flex items-center gap-3">
-          <button className="rounded-md border border-blue-500/60 px-4 py-2 text-sm font-medium text-white transition-all hover:border-blue-400 hover:text-blue-300">
+          <a href="/download-extension" className="rounded-md border border-blue-500/60 px-4 py-2 text-sm font-medium text-white transition-all hover:border-blue-400 hover:text-blue-300">
             Download Extension
-          </button>
+          </a>
           
         </div>
       </nav>
