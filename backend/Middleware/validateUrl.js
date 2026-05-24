@@ -16,6 +16,7 @@ const validateUrl = (req, res, next) => {
         }
 
         req.domain = parsedUrl.hostname;
+        req.normalizedUrl = parsedUrl.toString();
 
         next();
 

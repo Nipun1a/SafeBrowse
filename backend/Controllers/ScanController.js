@@ -13,9 +13,11 @@ const scanController = async (req, res) => {
 
         const { url } = req.body;
         const domain = req.domain;
+        const normalizedUrl = req.normalizedUrl || url;
+        const cacheKey = `scan:${normalizedUrl}`;
 
         // 1) Redis cache check
-        const cached = await redisClient.get(domain);
+        const cached = await redisClient.get(cacheKey);
         if (cached) {
             return res.status(200).json({
                 source: 'redis-cache',
@@ -25,7 +27,7 @@ const scanController = async (req, res) => {
 
         // 2) Mongo cache check
         const existingScan = await ScanResult.findOne({
-            domain,
+            url: normalizedUrl,
             expiresAt: { $gt: new Date() }
         });
 
@@ -38,8 +40,8 @@ const scanController = async (req, res) => {
 
         // 3) Run checks in parallel
         const [googleResult, virusTotalResult, sslResult, domainAge] = await Promise.all([
-            googleSafeBrowsing(url),
-            virusTotalScan(url),
+            googleSafeBrowsing(normalizedUrl),
+            virusTotalScan(normalizedUrl),
             checkSSL(domain),
             checkDomainAge(domain)
         ]);
@@ -47,11 +49,11 @@ const scanController = async (req, res) => {
         const score = calculateScore(googleResult, virusTotalResult, sslResult, domainAge);
 
         const newScan = await ScanResult.create({
-            url,
+            url: normalizedUrl,
             domain,
             score,
             threatDetails: {
-                googleSafeBrowsing: googleResult,
+                googleSafeBrowsing: googleResult?.status || 'unknown',
                 virusTotal: {
                     malicious: virusTotalResult?.malicious || 0,
                     harmless: virusTotalResult?.harmless || 0
@@ -62,7 +64,7 @@ const scanController = async (req, res) => {
         });
 
         // 4) Save to Redis for 24h
-        await redisClient.setEx(domain, 24 * 60 * 60, JSON.stringify(newScan));
+        await redisClient.setEx(cacheKey, 24 * 60 * 60, JSON.stringify(newScan));
 
         return res.status(200).json({
             source: 'live-scan',
