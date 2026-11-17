@@ -24,6 +24,6 @@ Store credentials in Vercel's backend environment settings. Provider checks show
 ## Deploy and smoke-test
 
 1. Deploy the backend preview and test `POST /api/scan` with `{"url":"https://example.com/"}`. Confirm the response has `data.verdict` and individual check statuses. Repeat the request to verify caching where available.
-2. Set `VITE_API_BASE_URL=https://<backend-preview-domain>/api` for the frontend preview, or use the production backend URL for a production build. The default production frontend proxies through the existing backend rewrite in `arya/vercel.json`.
+2. The built frontend sends scans to its own `/api/scan` path. The rewrite in `arya/vercel.json` proxies that request to the public backend at `https://safe-browse-nu.vercel.app`. Frontend previews also use this rewrite. Update its destination before building a preview against a different backend. `VITE_API_BASE_URL` applies to local Vite development only.
 3. Deploy the frontend preview, submit the same URL, and verify the report. Submit an invalid URL and confirm the UI displays the API error. Test the unpacked extension after the production backend is updated.
 4. Promote the tested backend and frontend to production. If the production backend hostname changes, update the frontend rewrite and the extension's API URL and host permission, then rebuild the extension ZIP.

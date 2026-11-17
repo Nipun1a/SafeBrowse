@@ -10,8 +10,10 @@ const STEP_DEFINITIONS = [
   { label: 'Preparing risk report', icon: 'pulse' },
 ]
 
-const apiBase = (import.meta.env.VITE_API_BASE_URL?.trim() ||
-  (import.meta.env.DEV ? 'http://localhost:5000/api' : '/api')).replace(/\/+$/, '')
+// Vercel forwards this same-origin path to the backend's production domain.
+const scanEndpoint = import.meta.env.MODE === 'development'
+  ? `${(import.meta.env.VITE_API_BASE_URL?.trim() || 'http://localhost:5000/api').replace(/\/+$/, '')}/scan`
+  : '/api/scan'
 
 const StepIcon = ({ type, status }) => {
   if (status === 'DONE') {
@@ -78,7 +80,7 @@ const Scan = () => {
 
     async function runScan() {
       try {
-        const response = await fetch(`${apiBase}/scan`, {
+        const response = await fetch(scanEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: displayUrl }),
