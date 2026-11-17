@@ -1,56 +1,53 @@
-let whoisClient;
+const axios = require('axios');
+const { thresholds } = require('../config/risk');
 
-const loadWhoisClient = async () => {
-    if (whoisClient) {
-        return whoisClient;
+let registry;
+let registryExpires = 0;
+const cache = new Map();
+const options = () => ({ signal: AbortSignal.timeout(1800), maxRedirects: 0, maxContentLength: 1024 * 1024 });
+
+async function getServices() {
+    if (!registry || Date.now() >= registryExpires) {
+        registryExpires = Date.now() + 86400000;
+        registry = axios.get('https://data.iana.org/rdap/dns.json', options())
+            .then(response => response.data.services)
+            .catch(error => {
+                registryExpires = Date.now() + 30000;
+                throw error;
+            });
     }
+    return registry;
+}
 
+async function lookup(domain) {
     try {
-        whoisClient = require('whois-json');
-        return whoisClient;
-    } catch (error) {
-        if (error.code !== 'ERR_REQUIRE_ESM') {
-            throw error;
-        }
-
-        const module = await import('whois-json');
-        whoisClient = module.default || module;
-        return whoisClient;
+        const services = await getServices();
+        const tld = domain.split('.').at(-1);
+        const entry = services.find(([suffixes]) => suffixes.includes(tld));
+        const base = entry?.[1].find(url => url.startsWith('https://'));
+        if (!base) return { status: 'unknown', reason: 'registry_unavailable' };
+        const { data } = await axios.get(new URL('domain/' + domain, base.replace(/\/?$/, '/')).href, options());
+        const registration = data.events?.find(event => event.eventAction === 'registration');
+        const ageDays = Math.floor((Date.now() - Date.parse(registration?.eventDate)) / 86400000);
+        if (!Number.isFinite(ageDays) || ageDays < 0) return { status: 'unknown', reason: 'missing_registration' };
+        return { status: 'available', ageDays, registeredAt: registration.eventDate,
+            young: ageDays < thresholds.newDomainDays };
+    } catch {
+        return { status: 'unknown', reason: 'rdap_unavailable' };
     }
-};
+}
 
-const withTimeout = (promise, timeoutMs) => {
-    let timer;
-    const timeoutPromise = new Promise((resolve) => {
-        timer = setTimeout(() => resolve(null), timeoutMs);
+module.exports = domain => {
+    if (!domain) return Promise.resolve({ status: 'unknown', reason: 'no_registered_domain' });
+    const hit = cache.get(domain);
+    if (hit && hit.expires > Date.now()) return hit.result;
+    if (cache.size >= 256) cache.delete(cache.keys().next().value);
+
+    const entry = { expires: Date.now() + 30000 };
+    entry.result = lookup(domain).then(result => {
+        if (result.status === 'available') entry.expires = Date.now() + 3600000;
+        return result;
     });
-
-    return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    cache.set(domain, entry);
+    return entry.result;
 };
-
-const checkDomainAge = async (domain) => {
-    try {
-        const whois = await loadWhoisClient();
-        const data = await withTimeout(whois(domain), 6000);
-
-        if (!data) {
-            return { ageInYears: 0 };
-        }
-
-        if (!data.creationDate) {
-            return { ageInYears: 0 };
-        }
-
-        const creationDate = new Date(data.creationDate);
-        const now = new Date();
-        const ageInYears = (now - creationDate) / (1000 * 60 * 60 * 24 * 365);
-
-        return { ageInYears: Math.floor(ageInYears) };
-
-    } catch (error) {
-        console.error('Domain age check failed:', error.message);
-        return { ageInYears: 0 };
-    }
-};
-
-module.exports = checkDomainAge;

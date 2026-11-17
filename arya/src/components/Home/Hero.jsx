@@ -32,7 +32,7 @@ const Hero = () => {
         <div className="relative grid items-center gap-10 lg:grid-cols-2">
           <div>
             <span className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
-              AI Engine v4.3 Active
+              URL reputation scanner
             </span>
 
             <h1 className="mt-5 max-w-xl text-4xl font-extrabold leading-[1.05] text-white sm:text-5xl lg:text-6xl">
@@ -46,8 +46,7 @@ const Hero = () => {
             </h1>
 
             <p className="mt-5 max-w-lg text-sm text-slate-300 sm:text-base">
-              Real-time AI-powered URL threat detection and enterprise-grade trust scoring
-              platform for modern digital safety.
+              Check a link against available threat intelligence and review its domain and HTTPS signals.
             </p>
 
             <form onSubmit={handleScan} className="mt-7 w-full max-w-xl">
@@ -68,6 +67,9 @@ const Hero = () => {
               </div>
               {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
             </form>
+            <p className="mt-3 max-w-xl text-xs text-slate-400">
+              Scans may send the submitted URL to reputation providers. Avoid submitting private or tokenized links.
+            </p>
 
             <a href="/result" className="mt-5 inline-flex items-center rounded-md border border-cyan-800/50 bg-[#07111d] px-4 py-2 text-xs font-semibold text-cyan-300 transition hover:border-cyan-500/60 hover:text-cyan-200">
               View Detail Report

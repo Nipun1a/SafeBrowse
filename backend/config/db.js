@@ -16,15 +16,12 @@ const connectDB = async () => {
   }
 
   connectionPromise = mongoose
-    .connect(process.env.MONGO_URI)
+    .connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 1500, socketTimeoutMS: 1500 })
     .then((conn) => {
       console.log(`MongoDB Connected: ${conn.connection.host}`);
       return conn.connection;
     })
-    .catch((error) => {
-      connectionPromise = undefined;
-      throw error;
-    });
+    .finally(() => { connectionPromise = undefined; });
 
   return connectionPromise;
 };

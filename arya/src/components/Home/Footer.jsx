@@ -10,8 +10,7 @@ const Footer = () => {
               Safe<span className="text-cyan-400">Browse</span>
             </h3>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-400">
-              Real-time AI-powered URL threat detection and enterprise-grade trust scoring
-              platform for modern digital safety.
+              Check public links using available reputation, DNS, and HTTPS signals.
             </p>
             <div className="mt-6 flex items-center gap-3">
               <a
@@ -37,7 +36,7 @@ const Footer = () => {
             <h4 className="text-xl font-bold text-white">Project Info</h4>
             <ul className="mt-4 space-y-3 text-sm text-slate-300">
               <li>[1] Check the Website </li>
-              <li>[2] AI-based Prediction</li>
+              <li>[2] Review Reputation Signals</li>
               <li>[3] Extension Available</li>
               
             </ul>

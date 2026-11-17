@@ -1,95 +1,85 @@
-const { createClient } = require("redis");
+const { createClient } = require('redis');
 
-const rawRedisUrl = process.env.REDIS_URL || "";
-const sanitizedRedisUrl = rawRedisUrl.replace(/^redis-cli\s+--tls\s+-u\s+/, "").trim();
+const url = (process.env.REDIS_URL || '').replace(/^redis-cli\s+--tls\s+-u\s+/, '').trim();
+const connectMs = Math.max(250, Math.min(10000, Number(process.env.REDIS_CONNECT_TIMEOUT_MS) || 2500));
+let client;
+let configError;
+let connecting;
+let failures = 0;
+let retryAt = 0;
+let lastError;
 
-let redisClient = null;
+function errorCode(error) {
+    return error.code || (error.message === 'Connection timeout' ? 'connection_timeout' : error.name);
+}
 
-if (sanitizedRedisUrl) {
+if (url) {
     try {
-        redisClient = createClient({
-            url: sanitizedRedisUrl,
+        client = createClient({ url, disableOfflineQueue: true,
+            socket: { connectTimeout: connectMs, reconnectStrategy: false } });
+        client.on('error', error => { lastError = errorCode(error); });
+    } catch {
+        configError = 'invalid_url';
+    }
+}
+
+async function ensureRedisConnection() {
+    if (!client || Date.now() < retryAt) return false;
+    if (client.isReady) return true;
+    if (!connecting) {
+        const timer = setTimeout(() => {
+            if (client.isOpen && !client.isReady) client.destroy();
+        }, connectMs + 100);
+        connecting = client.connect().then(() => {
+            failures = 0;
+            lastError = undefined;
+            return true;
+        }).catch(error => {
+            failures += 1;
+            retryAt = Date.now() + Math.min(60000, 3000 * 2 ** Math.min(6, failures - 1));
+            const code = lastError || errorCode(error);
+            console.warn('[Redis] Cache unavailable. Retrying with backoff:', code);
+            return false;
+        }).finally(() => {
+            clearTimeout(timer);
+            connecting = undefined;
         });
-    } catch (error) {
-        console.error("Redis client init failed:", error.message);
+    }
+    return connecting;
+}
+
+async function run(command) {
+    if (!await ensureRedisConnection()) return null;
+    try {
+        return await command(client.withCommandOptions({ abortSignal: AbortSignal.timeout(800) }));
+    } catch {
+        return null;
     }
 }
 
-let redisConnectPromise;
+async function healthCheck() {
+    if (!url) return { status: 'disabled' };
+    if (configError) return { status: 'unavailable', code: configError };
+    const pong = await run(connection => connection.ping());
+    return pong === 'PONG' ? { status: 'ready' } : { status: 'unavailable', code: lastError || 'ping_failed' };
+}
 
-if (redisClient) {
-    redisClient.on("error", (err) => {
-        console.error("Redis Error:", err);
+let startup;
+function checkStartup() {
+    startup ??= healthCheck().then(result => {
+        if (result.status === 'unavailable') {
+            console.warn('[Redis] Startup health check failed; scanning will continue:', result.code);
+        } else {
+            console.info('[Redis] Startup health:', result.status);
+        }
     });
+    return startup;
 }
-
-const ensureRedisConnection = async () => {
-    if (!redisClient) {
-        return false;
-    }
-
-    if (redisClient.isOpen) {
-        return true;
-    }
-
-    if (!redisConnectPromise) {
-        redisConnectPromise = redisClient
-            .connect()
-            .then(() => {
-                console.log("Redis Connected");
-                return true;
-            })
-            .catch((error) => {
-                console.error("Redis connection failed:", error.message);
-                return false;
-            })
-            .finally(() => {
-                redisConnectPromise = undefined;
-            });
-    }
-
-    return redisConnectPromise;
-};
-
-const get = async (key) => {
-    if (!redisClient) {
-        return null;
-    }
-
-    await ensureRedisConnection();
-    if (!redisClient.isOpen) {
-        return null;
-    }
-
-    try {
-        return await redisClient.get(key);
-    } catch (error) {
-        console.error("Redis get failed:", error.message);
-        return null;
-    }
-};
-
-const setEx = async (key, ttlSeconds, value) => {
-    if (!redisClient) {
-        return false;
-    }
-
-    await ensureRedisConnection();
-    if (!redisClient.isOpen) {
-        return false;
-    }
-
-    try {
-        await redisClient.setEx(key, ttlSeconds, value);
-        return true;
-    } catch (error) {
-        console.error("Redis setEx failed:", error.message);
-        return false;
-    }
-};
 
 module.exports = {
-    ensureRedisConnection,
-    get,
-    setEx,
+    healthCheck,
+    checkStartup,
+    get: key => run(connection => connection.get(key)),
+    setEx: (key, ttl, value) => run(connection => connection.setEx(key, ttl, value)),
+    eval: (script, args) => run(connection => connection.eval(script, args))
 };

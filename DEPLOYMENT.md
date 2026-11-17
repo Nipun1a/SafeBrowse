@@ -1,33 +1,29 @@
-# SafeBrowse Vercel Deployment
+# SafeBrowse on Vercel
 
-## Architecture
-- `arya/`: React + Vite frontend
-- `backend/`: Express API (serverless on Vercel)
+Use the existing two Vercel projects with Node.js 22. The backend project root is `backend` (Express function at `api/index.js`). The frontend project root is `arya` (Vite). Sign in with `vercel login` and link each directory to its existing project before deploying.
 
-## 1) Deploy Backend (`backend/`) on Vercel
-1. Create a new Vercel project and set **Root Directory** to `backend`.
-2. Framework preset: `Other`.
-3. Build/Output settings: keep default (Vercel will use `backend/vercel.json` + `api/index.js`).
-4. Add environment variables:
-- `MONGO_URI` (required)
-- `GOOGLE_SAFE_BROWSING_API_KEY` (required)
-- `VIRUSTOTAL_API_KEY` (required)
-- `REDIS_URL` (optional; app works without Redis cache)
-5. Deploy and copy backend URL, for example: `https://safebrowse-api.vercel.app`.
+## Backend environment
 
-## 2) Deploy Frontend (`arya/`) on Vercel
-1. Create another Vercel project and set **Root Directory** to `arya`.
-2. Framework preset: `Vite`.
-3. Add environment variable:
-- `VITE_API_BASE_URL=https://<your-backend-domain>/api`
-4. Deploy.
+| Variable | Purpose |
+| --- | --- |
+| `GOOGLE_WEB_RISK_API_KEY` | Fallback Google lookup when the v4 key is unset. Enable Web Risk in its Google Cloud project. |
+| `GOOGLE_SAFE_BROWSING_API_KEY` | Google v4 lookup for noncommercial use. Google has deprecated v4. |
+| `VIRUSTOTAL_API_KEY` | Optional v3 reputation. By default, a report miss triggers submission and bounded polling. The public plan is intended for noncommercial use and has a low quota. |
+| `REDIS_URL` | Optional shared cache and VirusTotal quota enforcement. Use a reachable TLS URL for managed Redis. |
+| `VIRUSTOTAL_SUBMIT_UNKNOWN` | Set to `false` for lookups only. |
+| `TRANCO_LIST_PATH` | Optional path to an extracted Tranco CSV included in the deployed backend. |
+| `OPENPHISH_FEED_PATH` | Optional path to a fresh, licensed OpenPhish feed file. |
+| `MONGO_URI` | Optional shared cache with TTL expiry. |
 
-## 3) Post-deploy checks
-1. Open frontend and run a scan from homepage.
-2. Confirm request succeeds at `POST https://<backend-domain>/api/scan`.
-3. Confirm result page loads and displays live scan payload.
+Store credentials in Vercel's backend environment settings. Provider checks show as unavailable when their keys are absent or their requests fail. DNS, URL structure and standard HTTPS certificate checks still run. Scans can share the submitted URL with configured reputation providers. Configured caches store the normalized URL without its fragment.
 
-## Local development
-- Frontend: `cd arya && npm run dev`
-- Backend: `cd backend && npm start`
-- Local frontend defaults to `http://localhost:5000/api`.
+- [Google Web Risk Lookup](https://docs.cloud.google.com/web-risk/docs/lookup-api)
+- [Google Safe Browsing v4](https://developers.google.com/safe-browsing/v4)
+- [VirusTotal API plans and quota](https://docs.virustotal.com/docs/api-overview)
+
+## Deploy and smoke-test
+
+1. Deploy the backend preview and test `POST /api/scan` with `{"url":"https://example.com/"}`. Confirm the response has `data.verdict` and individual check statuses. Repeat the request to verify caching where available.
+2. Set `VITE_API_BASE_URL=https://<backend-preview-domain>/api` for the frontend preview, or use the production backend URL for a production build. The default production frontend proxies through the existing backend rewrite in `arya/vercel.json`.
+3. Deploy the frontend preview, submit the same URL, and verify the report. Submit an invalid URL and confirm the UI displays the API error. Test the unpacked extension after the production backend is updated.
+4. Promote the tested backend and frontend to production. If the production backend hostname changes, update the frontend rewrite and the extension's API URL and host permission, then rebuild the extension ZIP.

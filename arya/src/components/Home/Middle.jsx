@@ -2,9 +2,9 @@ import React from 'react'
 
 const pillars = [
   {
-    title: 'Malware Detection',
+    title: 'Threat Lists',
     description:
-      'Deep heuristic analysis and behavioral sandboxing to identify zero-day malware and trojan payloads hidden in site code.',
+      'Looks up the submitted URL for known phishing, malware, and unwanted software matches.',
     icon: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-3z" />
@@ -15,7 +15,7 @@ const pillars = [
   {
     title: 'Reputation Analysis',
     description:
-      'Cross-referencing 40+ global blacklists including VirusTotal, Google Safe Browsing, and specialized dark-web trackers.',
+      'Looks up a recent VirusTotal report and shows malicious and suspicious engine results when available.',
     icon: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-3z" />
@@ -25,7 +25,7 @@ const pillars = [
   {
     title: 'SSL Security Validation',
     description:
-      'Comprehensive cryptographic audit of SSL/TLS handshakes, certificate authority validity, and cipher strength.',
+      'Checks whether the certificate is trusted and matches the hostname on standard HTTPS.',
     icon: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="5" y="11" width="14" height="9" rx="2" />
@@ -34,9 +34,9 @@ const pillars = [
     ),
   },
   {
-    title: 'AI Brain Scoring',
+    title: 'Domain and URL Signals',
     description:
-      'Neural network processing of domain age, WHOIS records, and visual similarity to detect phishing and spoofing attempts.',
+      'Checks public DNS resolution and highlights URL structure that merits a closer look.',
     icon: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M9 8v8" />
@@ -54,7 +54,7 @@ const Middle = () => {
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Advanced Security Pillars</h2>
         <p className="mx-auto mt-4 max-w-2xl text-sm text-slate-400 sm:text-base">
-          Our AI engine leverages four distinct diagnostic layers to provide a 360-degree security profile for any URL.
+          The report shows the evidence behind each verdict, including checks that were unavailable.
         </p>
       </div>
 

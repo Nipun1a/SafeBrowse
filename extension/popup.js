@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Step names for visual scan flow
   const STEPS = [
     { threshold: 25, text: 'Analyzing URL structure...' },
-    { threshold: 55, text: 'Querying Google Safe Browsing...' },
+    { threshold: 55, text: 'Checking Google threat lists...' },
     { threshold: 75, text: 'Checking VirusTotal reputation...' },
     { threshold: 95, text: 'Validating SSL certificate & trust score...' }
   ];
@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const scanEndpoint = `${backendApiUrl}/scan`;
       const response = await fetch(scanEndpoint, {
         method: 'POST',
+        signal: AbortSignal.timeout(20000),
         headers: {
           'Content-Type': 'application/json'
         },
@@ -126,10 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInterval(progressInterval);
       updateProgress(100);
 
-      // Transition to results viewport
-      setTimeout(() => {
-        renderResults(result.data, domain);
-      }, 300);
+      renderResults(result.data, domain);
 
     } catch (err) {
       clearInterval(progressInterval);
@@ -152,36 +150,21 @@ document.addEventListener('DOMContentLoaded', () => {
     showScreen(screenResult);
     resultDomain.textContent = domain;
     
-    const scoreRaw = Number(scanData?.score);
-    const trustScore = Number.isFinite(scoreRaw) ? Math.max(0, Math.min(100, Math.round(scoreRaw))) : 90;
-    
-    // Circle gauge math (circumference for r=48 is 301.6)
-    const circumference = 301.6;
-    const offset = circumference - (trustScore / 100) * circumference;
-    
-    // Animate the counter digits
-    animateScoreCounter(trustScore);
-
-    // Score categorization
-    let tone = 'emerald';
-    let statusLabel = 'Website Safe';
-    
-    if (trustScore >= 85) {
-      tone = 'emerald';
-      statusLabel = 'Website Safe';
-    } else if (trustScore >= 70) {
-      tone = 'green';
-      statusLabel = 'Low Risk';
-    } else if (trustScore >= 50) {
-      tone = 'yellow';
-      statusLabel = 'Moderate Risk';
-    } else if (trustScore >= 30) {
-      tone = 'orange';
-      statusLabel = 'High Risk';
-    } else {
-      tone = 'red';
-      statusLabel = 'Dangerous';
+    if (!Number.isFinite(scanData?.score) || !scanData.verdict) {
+      showError('An updated scan report is unavailable.');
+      return;
     }
+    const riskScore = Math.max(0, Math.min(100, Math.round(scanData.score)));
+    const offset = 301.6 * (1 - riskScore / 100);
+    animateScoreCounter(riskScore);
+
+    const verdicts = {
+      MALICIOUS: ['red', 'Malicious'],
+      SUSPICIOUS: ['yellow', 'Caution advised'],
+      UNKNOWN: ['slate', 'Inconclusive'],
+      NO_KNOWN_THREATS: ['emerald', 'No known threats']
+    };
+    const [tone, statusLabel] = verdicts[scanData.verdict] || verdicts.UNKNOWN;
 
     // Apply color tone to circular gauge stroke
     if (gaugeCircle) {
@@ -190,25 +173,23 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const colorClasses = {
         emerald: 'text-emerald-400',
-        green: 'text-green-500',
+        slate: 'text-slate-400',
         yellow: 'text-yellow-400',
-        orange: 'text-orange-500',
         red: 'text-red-500'
       };
       gaugeCircle.classList.add(colorClasses[tone]);
     }
 
     // Verdict Badge update
-    if (verdictText) verdictText.textContent = statusLabel;
+    if (verdictText) verdictText.textContent = scanData.confidence ? `${statusLabel} · ${scanData.confidence} confidence` : statusLabel;
     
     if (verdictBadge) {
       verdictBadge.className = 'inline-flex items-center gap-1.5 rounded-full border px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-all';
       
       const badgeClasses = {
         emerald: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-400',
-        green: 'border-green-500/35 bg-green-500/10 text-green-400',
+        slate: 'border-slate-500/35 bg-slate-500/10 text-slate-400',
         yellow: 'border-yellow-500/35 bg-yellow-500/10 text-yellow-400',
-        orange: 'border-orange-500/35 bg-orange-500/10 text-orange-400',
         red: 'border-red-500/35 bg-red-500/10 text-red-400'
       };
       verdictBadge.classList.add(...badgeClasses[tone].split(' '));
@@ -220,10 +201,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1) Google Safe Browsing Status
     if (googleStatus) {
       const googleVerdict = (threatDetails?.googleSafeBrowsing || 'unknown').toLowerCase();
-      googleStatus.textContent = googleVerdict;
+      googleStatus.textContent = googleVerdict === 'match'
+        ? threatDetails.googleThreatTypes?.join(', ') || 'MATCH'
+        : googleVerdict.replaceAll('_', ' ');
       googleStatus.className = 'rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide';
       
-      if (googleVerdict === 'clean') {
+      if (googleVerdict === 'no_match') {
         googleStatus.classList.add('bg-emerald-500/10', 'text-emerald-400');
       } else if (googleVerdict === 'unknown') {
         googleStatus.classList.add('bg-slate-900', 'text-slate-400');
@@ -232,33 +215,19 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 2) VirusTotal Status
-    const vtMalicious = threatDetails?.virusTotal?.malicious ?? 0;
-    const vtHarmless = threatDetails?.virusTotal?.harmless ?? 0;
-    if (vtSummary) vtSummary.textContent = `${vtMalicious} flagged / ${vtHarmless} clean`;
-    
+    const vt = threatDetails.virusTotal;
+    const hasReport = vt?.status === 'completed';
+    if (vtSummary) vtSummary.textContent = hasReport
+      ? `${vt.malicious} malicious / ${vt.suspicious} suspicious`
+      : 'No recent report available';
+
     if (vtStatus) {
-      vtStatus.className = 'rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide';
-      if (vtMalicious > 0) {
-        vtStatus.textContent = 'RISK';
-        vtStatus.classList.add('bg-rose-500/10', 'text-rose-400');
-      } else {
-        vtStatus.textContent = 'SAFE';
-        vtStatus.classList.add('bg-emerald-500/10', 'text-emerald-400');
-      }
+      vtStatus.textContent = !hasReport ? 'UNKNOWN'
+        : vt.malicious > 0 ? 'RISK' : vt.suspicious > 0 ? 'CAUTION' : 'NO FLAGS';
     }
 
-    // 3) SSL Certificate Status
     if (sslStatus) {
-      const sslValid = !!threatDetails?.sslValid;
-      sslStatus.className = 'rounded px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide';
-      if (sslValid) {
-        sslStatus.textContent = 'VALID';
-        sslStatus.classList.add('bg-emerald-500/10', 'text-emerald-400');
-      } else {
-        sslStatus.textContent = 'INVALID';
-        sslStatus.classList.add('bg-rose-500/10', 'text-rose-400');
-      }
+      sslStatus.textContent = (threatDetails.sslStatus || 'unknown').replaceAll('_', ' ').toUpperCase();
     }
   }
 

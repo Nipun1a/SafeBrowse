@@ -1,79 +1,140 @@
+const { getDomain } = require('tldts');
+const checkOpenPhish = require('../Services/openPhish');
+const checkDomainAge = require('../Services/domainAgeService');
+const { collectSignals, trancoStatus } = require('../Services/urlSignals');
+const { cacheSeconds, thresholds, scores, feed } = require('../config/risk');
+const { createHash } = require('node:crypto');
 const ScanResult = require('../Models/ScanResults');
 const googleSafeBrowsing = require('../Services/googleSafeBrowsing');
 const virusTotalScan = require('../Services/virusTotal');
 const calculateScore = require('../Services/scoreService');
 const checkSSL = require('../Services/sslService');
-const checkDomainAge = require('../Services/domainAgeService');
-const redisClient = require('../config/redis');
+const { checkDNS } = require('../Services/dnsService');
+const redis = require('../config/redis');
 const connectDB = require('../config/db');
 
-const scanController = async (req, res) => {
+const version = 4;
+const inFlight = new Map();
+const recent = new Map();
+
+async function scan(parsed, { useVirusTotal = true, connectToTarget = true, useFeed = true } = {}) {
+    const url = parsed.href;
+    const domain = parsed.hostname;
+    const host = domain.replace(/\.$/, '');
+    const dns = await checkDNS(host);
+    const restricted = dns.status === 'non_public';
+    const skipped = { status: 'unknown', reason: 'non_public_dns' };
+    const [google, virusTotal, ssl, age, openPhish] = await Promise.all([
+        restricted ? skipped : googleSafeBrowsing(url),
+        restricted ? skipped : useVirusTotal ? virusTotalScan(url, {
+            allowSubmission: connectToTarget && dns.status === 'public'
+        }) : { status: 'unknown', reason: 'evaluation_disabled' },
+        connectToTarget ? checkSSL(parsed, dns) : { status: 'not_checked' },
+        dns.status === 'public' ? checkDomainAge(getDomain(host)) : skipped,
+        useFeed ? checkOpenPhish(url) : { status: 'disabled' }
+    ]);
+    const reasons = collectSignals({ url: parsed, google, vt: virusTotal, tls: ssl, dns, age });
+    if (openPhish.status === 'match') {
+        reasons.push({ id: 'openphish_match', weight: scores.malicious, explanation: 'OpenPhish listed this exact URL.' });
+    }
+    const result = calculateScore(google, virusTotal, reasons);
+    const now = Date.now();
+    const vtExpires = virusTotal.status === 'completed' ? +virusTotal.analyzedAt +
+        thresholds.staleReportDays * 86400000 : Infinity;
+    const feedRefresh = openPhish.status === 'disabled' ? Infinity : now + feed.refreshMs;
+    const expiry = Math.min(now + cacheSeconds[result.verdict] * 1000, google.expiresAt ?? Infinity,
+        openPhish.expiresAt ?? Infinity, feedRefresh, vtExpires);
+    const { redirectChain, finalUrl, ...report } = virusTotal;
+
+    return {
+        url, domain, ...result, reasons, scanVersion: version,
+        status: 'completed', scannedAt: new Date(now), expiresAt: new Date(expiry),
+        threatDetails: {
+            googleSafeBrowsing: google.status,
+            googleReason: google.reason,
+            googleThreatTypes: google.types ?? [],
+            googleProvider: google.provider,
+            virusTotal: { ...report, redirectCount: redirectChain?.length,
+                finalHost: URL.canParse(finalUrl) ? new URL(finalUrl).hostname : undefined },
+            sslValid: ssl.status === 'valid',
+            sslStatus: ssl.status,
+            certificate: ssl,
+            dnsStatus: dns.status,
+            domainAge: age,
+            trancoStatus,
+            openPhish
+        }
+    };
+}
+
+function isCurrent(data, url) {
+    return data?.scanVersion === version && data.url === url && Date.parse(data.expiresAt) > Date.now();
+}
+
+async function readMongo(url) {
+    if (!process.env.MONGO_URI) return null;
+    let timer;
     try {
-        await connectDB();
-
-        const { url } = req.body;
-        const domain = req.domain;
-        const normalizedUrl = req.normalizedUrl || url;
-        const cacheKey = `scan:${normalizedUrl}`;
-
-        // 1) Redis cache check
-        const cached = await redisClient.get(cacheKey);
-        if (cached) {
-            return res.status(200).json({
-                source: 'redis-cache',
-                data: JSON.parse(cached)
-            });
-        }
-
-        // 2) Mongo cache check
-        const existingScan = await ScanResult.findOne({
-            url: normalizedUrl,
-            expiresAt: { $gt: new Date() }
-        });
-
-        if (existingScan) {
-            return res.status(200).json({
-                source: 'cache',
-                data: existingScan
-            });
-        }
-
-        // 3) Run checks in parallel
-        const [googleResult, virusTotalResult, sslResult, domainAge] = await Promise.all([
-            googleSafeBrowsing(normalizedUrl),
-            virusTotalScan(normalizedUrl),
-            checkSSL(domain),
-            checkDomainAge(domain)
+        return await Promise.race([
+            connectDB().then(() => ScanResult.findOne({
+                url, scanVersion: version, expiresAt: { $gt: new Date() }
+            }).sort({ expiresAt: -1 }).maxTimeMS(750).lean()),
+            new Promise(resolve => { timer = setTimeout(() => resolve(null), 1000); })
         ]);
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
-        const score = calculateScore(googleResult, virusTotalResult, sslResult, domainAge);
+async function loadScan(parsed) {
+    const url = parsed.href;
+    const key = `scan:v${version}:${createHash('sha256').update(url).digest('hex')}`;
+    const serialized = await redis.get(key).catch(() => null);
+    if (serialized) {
+        try {
+            const data = JSON.parse(serialized);
+            if (isCurrent(data, url)) return { source: 'redis-cache', data };
+        } catch {
+            // Refresh a corrupt cache entry.
+        }
+    }
 
-        const newScan = await ScanResult.create({
-            url: normalizedUrl,
-            domain,
-            score,
-            threatDetails: {
-                googleSafeBrowsing: googleResult?.status || 'unknown',
-                virusTotal: {
-                    malicious: virusTotalResult?.malicious || 0,
-                    harmless: virusTotalResult?.harmless || 0
-                },
-                sslValid: !!sslResult?.valid
-            },
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
-        });
+    const cached = await readMongo(url);
+    if (isCurrent(cached, url)) return { source: 'cache', data: cached };
 
-        // 4) Save to Redis for 24h
-        await redisClient.setEx(cacheKey, 24 * 60 * 60, JSON.stringify(newScan));
+    const data = await scan(parsed);
+    const ttl = Math.floor((+data.expiresAt - Date.now()) / 1000);
+    if (ttl > 0) {
+        await Promise.allSettled([
+            redis.setEx(key, ttl, JSON.stringify(data)),
+            process.env.MONGO_URI && ScanResult.db.readyState === 1 ? ScanResult.create(data) : undefined
+        ]);
+    }
+    return { source: 'live-scan', data };
+}
 
-        return res.status(200).json({
-            source: 'live-scan',
-            data: newScan
-        });
+module.exports = async (req, res) => {
+    const parsed = req.scanUrl;
+    const url = parsed.href;
+    const cached = recent.get(url);
+    if (isCurrent(cached, url)) return res.json({ source: 'memory-cache', data: cached });
+
+    try {
+        if (!inFlight.has(url)) {
+            inFlight.set(url, loadScan(parsed).then(result => {
+                recent.delete(url);
+                if (recent.size >= 256) recent.delete(recent.keys().next().value);
+                if (isCurrent(result.data, url)) recent.set(url, result.data);
+                return result;
+            }).finally(() => inFlight.delete(url)));
+        }
+        return res.json(await inFlight.get(url));
     } catch (error) {
-        console.error('Scan Error:', error);
-        return res.status(500).json({ error: 'Internal Server Error' });
+        console.error('Scan failed:', error.code || error.name);
+        return res.status(500).json({ error: 'Unable to complete the scan' });
     }
 };
 
-module.exports = scanController;
+module.exports.scan = scan;

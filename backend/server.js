@@ -1,17 +1,18 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('node:path').join(__dirname, '.env'), quiet: true });
 const app = require('./app');
-const connectDB = require('./config/db');
-const { ensureRedisConnection } = require('./config/redis');
 
 const PORT = process.env.PORT || 5000;
 
 let server;
 
 const startServer = async () => {
-    await connectDB();
-    await ensureRedisConnection();
-
-    server = app.listen(PORT, () => {
+    void require('./config/redis').checkStartup();
+    server = app.listen(PORT, error => {
+        if (error) {
+            console.error('Startup error:', error.code || error.name);
+            process.exitCode = 1;
+            return;
+        }
         console.log(`Server is running on port ${PORT}`);
     });
 };

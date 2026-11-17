@@ -1,36 +1,23 @@
-const calculateScore = (googleResult, virusTotalResult, sslResult, domainAge) => {
-    let score = 100;
+const { thresholds, scores } = require('../config/risk');
 
-    const googleStatus = googleResult?.status || 'unknown';
-    if (googleStatus === 'malware') score -= 70;
-    else if (googleStatus === 'phishing') score -= 75;
-    else if (googleStatus === 'unknown') score -= 15;
+module.exports = (google, vt, reasons = []) => {
+    const googleMatch = google.status === 'match';
+    const feedMatch = reasons.some(reason => reason.id === 'openphish_match');
+    const freshReport = vt.status === 'completed';
+    const hasFlags = (vt.malicious || 0) + (vt.suspicious || 0) > 0;
+    const googleAnswered = google.status === 'no_match';
+    const score = Math.min(99, reasons.reduce((sum, reason) => sum + reason.weight, 0));
 
-    const vtStatus = virusTotalResult?.status || 'unknown';
-    const vtMalicious = virusTotalResult?.malicious || 0;
-    const vtSuspicious = virusTotalResult?.suspicious || 0;
-
-    if (vtMalicious > 0) {
-        score -= Math.min(45, vtMalicious * 9);
-    } else if (vtSuspicious > 0) {
-        score -= Math.min(25, vtSuspicious * 5);
-    } else if (vtStatus !== 'completed') {
-        score -= 12;
+    if (googleMatch || feedMatch || vt.malicious >= thresholds.maliciousEngines) {
+        return { verdict: 'MALICIOUS', score: scores.malicious, confidence: googleMatch || feedMatch || freshReport ? 'HIGH' : 'MEDIUM' };
     }
-
-    if (!sslResult?.valid) score -= 20;
-
-    const ageInYears = domainAge?.ageInYears;
-    if (typeof ageInYears !== 'number' || Number.isNaN(ageInYears)) {
-        score -= 8;
-    } else if (ageInYears < 1) {
-        score -= 20;
+    if (hasFlags || ((googleAnswered || freshReport) && score >= thresholds.suspicious)) {
+        return { verdict: 'SUSPICIOUS', score: Math.max(score, scores.minimumSuspicious),
+            confidence: freshReport || googleAnswered ? 'MEDIUM' : 'LOW' };
     }
-
-    if (score < 0) score = 0;
-    if (score > 100) score = 100;
-
-    return score;
+    if (!googleAnswered || !freshReport) {
+        return { verdict: 'UNKNOWN', score: Math.max(score, scores.unknown),
+            confidence: googleAnswered || freshReport ? 'LOW' : 'NONE' };
+    }
+    return { verdict: 'NO_KNOWN_THREATS', score, confidence: 'HIGH' };
 };
-
-module.exports = calculateScore;
